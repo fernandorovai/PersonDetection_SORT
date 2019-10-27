@@ -1,12 +1,9 @@
 #!/usr/bin/env python
 """
-Author: Fernando Rodrigues Jr (fernando.junior@hotmail.com)
+Author: Fernando Rodrigues Jr (fernandorovai@hotmail.com)
 Date: 24/10/2019
 THIS IS A DEMO SCRIPT. IT DOES NOT FIT FOR DEPLOYMENT
 
-Person detection with two different trackings
-#1 - SORT
-#2 - DEEP_SORT
 """
 from __future__ import print_function
 import os
@@ -18,20 +15,15 @@ import numpy as np
 import logging as log
 from argparse import ArgumentParser
 from openvino.inference_engine import IENetwork, IEPlugin
-from sort.sort import *
-from deep_sort.deep_sort import nn_matching
-from deep_sort.deep_sort.detection import Detection
-from deep_sort.deep_sort.tracker import Tracker
-from deep_sort.tools import generate_detections as gdet
 
 
-class PersonDetector():
-    def __init__(self, modelPath, extensionPath):
+class Detector():
+    def __init__(self, modelPath, extensionPath=None):
         self.device         = 'GPU'
         self.cpu_extension  = extensionPath
         self.model_xml      = modelPath
         self.model_bin      = os.path.splitext(self.model_xml)[0] + ".bin"
-        self.input_size     = (320,544)
+        self.input_size     = None
         self.exec_net       = None
         self.input_blob     = None
         self.infer_time     = []
@@ -51,14 +43,17 @@ class PersonDetector():
         assert len(net.outputs) == 1, "Sample supports only single output topologies"
         self.input_blob = next(iter(net.inputs))
 
+        # Set input size
+        self.input_size = net.inputs[self.input_blob].shape[2:]
+        
         # Load network to the plugin
         self.exec_net = plugin.load(network=net)
         del net
         # Warmup with last image to avoid caching
         self.exec_net.infer(inputs={self.input_blob: np.zeros((1, 3, self.input_size[0], self.input_size[1]))})
 
-    @staticmethod
-    def PreProcessFrame(frame):
+    
+    def PreProcessFrame(self, frame):
         n, c, h, w = [1, 3, self.input_size[0], self.input_size[1]]
         image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         image = cv2.resize(image, (w, h))
@@ -71,11 +66,8 @@ class PersonDetector():
         trackID = ''
         width, height = videoRes
 
-        if len(coords) == 5:
-            xMin,yMin,xMax,yMax,trackID = coords
-        else:
-            xMin,yMin,xMax,yMax = coords
-
+        xMin,yMin,xMax,yMax,labelID = coords
+ 
         if xMin < 0:
             xMin= 0
         if yMin < 0:
@@ -97,14 +89,13 @@ class PersonDetector():
         lineType               = 2
         try:
             cv2.rectangle(frame, (int(xMin), int(yMin)), (int(xMax),int(yMax)), color, thickness)
-            cv2.putText(frame,str(trackID), bottomLeftCornerOfText, font, fontScale, fontColor, lineType)
         except Exception as e:
             print(e)
         return frame
 
     @staticmethod
     def PosProcessing(rawResultArr, maxTresh=0.5):
-        faces = []
+        boxes = []
         for idx, data in enumerate(rawResultArr):
             score = data[2]
             if score > maxTresh:
@@ -126,15 +117,15 @@ class PersonDetector():
                 if(xMin and yMin and xMax and yMax == 0.0):
                     continue
 
-                faces.append((xMin,yMin,xMax,yMax))
-        return faces
+                boxes.append((xMin,yMin,xMax,yMax,label))
+        return boxes
 
     def Detect(self, frame):
         t0 = time.time()
         processedFrame = self.PreProcessFrame(frame)
         res            = self.exec_net.infer(inputs={self.input_blob: processedFrame})
         rawResultArr   = np.squeeze(res['detection_out'])
-        faces          = self.PosProcessing(rawResultArr, maxTresh=0.7)
+        boxes          = self.PosProcessing(rawResultArr, maxTresh=0.7)
         
         # self.infer_time.append((time.time()-t0))
         
@@ -143,7 +134,12 @@ class PersonDetector():
         #     self.infer_time.pop()
 
         #  log.info("Face Detection Average FPS: {} FPS".format(1/np.average(np.asarray(self.infer_time))))
-        return faces
+        return boxes
+
+    def GetUnormalizedBboxes(self, bboxes, videoRes):
+        width, height = videoRes
+        return [(box['xMin']*width,box['yMin']*height,box['xMax']*width,box['yMax']*height) for box in bboxes]
+      
 
     def bboxToWH(self, bboxes):
         whBboxes = []
@@ -165,81 +161,3 @@ class PersonDetector():
         yMax  = (bbox[3] + yMin)/videoSize[1]
 
         return (xMin,yMin,xMax,yMax)
-
-if __name__ == '__main__':
-    def build_argparser():
-        parser = ArgumentParser()
-        parser.add_argument("-m", "--model", help="Path to an .xml file with a trained model.", required=True, type=str)
-        parser.add_argument("-l", "--cpu_extension",
-                            help="MKLDNN (CPU)-targeted custom layers.Absolute path to a shared library with the kernels "
-                                "impl.", type=str, default=None)
-        parser.add_argument("-pp", "--plugin_dir", help="Path to a plugin folder", type=str, default=None)
-        parser.add_argument("-d", "--device",
-                            help="Specify the target device to infer on; CPU, GPU, FPGA or MYRIAD is acceptable. Sample "
-                                "will look for a suitable plugin for device specified (CPU by default)", default="CPU",
-                            type=str)
-        return parser
-
-    args = build_argparser().parse_args()
-    personDetector = PersonDetector(args.model, args.cpu_extension)
-    deepSort = False
-    sort = True
-
-    ####### SORT 
-    mot_tracker = Sort() 
-
-    ######## DEEP SORT PARAMS
-    # Definition of the parameters
-    max_cosine_distance = 0.3
-    nn_budget = None    
-   
-    model_filename = 'deep_sort/models/mars-small128.pb'
-    encoder = gdet.create_box_encoder(model_filename,batch_size=1)
-    
-    metric = nn_matching.NearestNeighborDistanceMetric("cosine", max_cosine_distance, nn_budget)
-    tracker = Tracker(metric)
-   
-    # Open Webcam
-    video_capturer = cv2.VideoCapture(0)
-    video_capturer.set(cv2.CAP_PROP_FRAME_WIDTH, 720)
-    video_capturer.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-
-    infer_time = []
-    videoSize = (video_capturer.get(3), video_capturer.get(4))
-    while video_capturer.isOpened():
-        _,frame = video_capturer.read()
-        bboxes = personDetector.Detect(frame)     
-
-        # Draw detections
-        for bbox in bboxes:
-            frame = personDetector.DrawBox(frame, bbox, videoSize,thickness=5)
-
-        if deepSort:
-            features = encoder(frame,np.array(personDetector.bboxToWH(bboxes)))     
-            detections = [Detection(bbox, 1.0, feature) for bbox, feature in zip(personDetector.bboxToWH(bboxes), features)]
-
-            # Call tracker
-            tracker.predict()
-            tracker.update(detections)
-            
-            for track in tracker.tracks:
-                if not track.is_confirmed() or track.time_since_update > 1:
-                    continue 
-                bbox = track.to_tlbr()
-                frame = personDetector.DrawBox(frame, personDetector.bboxToXY(bbox,videoSize), videoSize, color=(255,255,255),thickness=2)
-                cv2.putText(frame, str(track.track_id),(int(bbox[0]), int(bbox[1])),0, 5e-3 * 200, (0,255,0),2)
-        elif sort:
-            track_bbs_ids = mot_tracker.update(np.array(bboxes))        
-
-            # Draw tracker
-            for person in track_bbs_ids:
-                frame = personDetector.DrawBox(frame, person.tolist(), videoSize, color=(255,255,255),thickness=2)
-        
-        cv2.imshow('frame',frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
-    video_capturer.release()
-    cv2.destroyAllWindows()
-    del exec_net
-    del plugin
