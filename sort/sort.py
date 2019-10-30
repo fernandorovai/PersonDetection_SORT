@@ -170,10 +170,8 @@ def associate_detections_to_trackers(detections,trackers,iou_threshold = 0.3):
 
   return matches, np.array(unmatched_detections), np.array(unmatched_trackers)
 
-
-
 class Sort(object):
-  def __init__(self,max_age=40,min_hits=3):
+  def __init__(self,max_age=40,min_hits=8):
     """
     Sets key parameters for SORT
     """

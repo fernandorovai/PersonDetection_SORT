@@ -11,8 +11,7 @@ class App extends React.Component {
   }
 
   componentDidMount() {
-    var socket = new WebSocket('ws://192.168.0.16:8765');
-    var socket2 = new WebSocket('ws://192.168.0.16:8766');
+    var socket = new WebSocket('ws://10.114.86.79:8765');
     socket.onopen = function (e) {
       console.log("connected")
     }
@@ -28,7 +27,7 @@ class App extends React.Component {
         //     console.log(e.target.result)
         // }
         // reader2.readAsArrayBuffer(blob)
-        
+
         // reader2.readAsText(blob);
 
         var reader = new FileReader();
@@ -42,16 +41,14 @@ class App extends React.Component {
       else if (typeof (streamData.data) == 'string') {
 
         let jsonObject = JSON.parse(streamData.data);
-        // console.log(jsonObject)
+        console.log(jsonObject['detectionHistory'])
 
         // this.setState({ "imageSrc": jsonObject })
         // console.log(jsonObject)
       }
     }
 
-    socket2.onmessage = (streamData) => {
-      console.log(streamData)
-    }
+
   };
 
   render() {

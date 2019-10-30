@@ -1,0 +1,2 @@
+:: python .\personDetector.py -m 'data\resnet50-coco\frozen_inference_graph.xml' -d GPU --labels 'data\resnet50-coco\mscoco.json'
+python personDetector.py -m "C:\\Users\\juniofer\\OneDrive - Mars Inc\\Documents\\PersonDetection_SORT\\data\\person-detection-retail-0013\\FP32\\person-detection-retail-0013.xml" -d GPU 
