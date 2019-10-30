@@ -28,6 +28,8 @@ class TrackerBbox():
         self.boxCoords = boxCoords
         self.hits = 0
         self.aliveTime = 0
+        self.lastUpdate = datetime.datetime.now()
+
 
     def increaseHit(self):
         self.hits += 1
@@ -38,6 +40,16 @@ class TrackerBbox():
     def updateAliveTime(self):
         self.aliveTime = alive = (
             datetime.datetime.now() - self.startTime).total_seconds()
+
+    def resetHits(self):
+        self.hits = 0
+
+    def refreshLastUpdate(self):
+        self.lastUpdate = datetime.datetime.now()
+
+    def getIdleTime(self):
+        idle = datetime.datetime.now() - self.lastUpdate
+        return idle.total_seconds()
 
 
 """Main thread resposible for receiving camera frames,
@@ -71,6 +83,7 @@ class MainProcess(threading.Thread):
         self.detectedPersonHisFiltered = []
         self.sampleTime = 10  # seconds
         self.framesFactor = 0.3
+        self.maxIdleTime = 10
 
     # return unormalized person bboxes
     def getPersonBboxes(self):
@@ -108,7 +121,7 @@ class MainProcess(threading.Thread):
         personTracker = Sort()
 
         # Open Webcam
-        video_capturer = cv2.VideoCapture(1)
+        video_capturer = cv2.VideoCapture(0)
         # video_capturer.set(cv2.CAP_PROP_FRAME_WIDTH, 720)
         # video_capturer.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
@@ -163,6 +176,7 @@ class MainProcess(threading.Thread):
                     if trackID in self.detectedPersonHist:
                         self.detectedPersonHist[trackID].increaseHit()
                         self.detectedPersonHist[trackID].updateAliveTime()
+                        self.detectedPersonHist[trackID].refreshLastUpdate()
                     else:
                         self.detectedPersonHist[trackID] = TrackerBbox(
                             trackID, (0))
@@ -176,21 +190,30 @@ class MainProcess(threading.Thread):
                     # 15*20*0.4 = 120 hits to be considered a valid box
                     filteredDetection = [self.detectedPersonHist[bboxID]
                                          for bboxID in self.detectedPersonHist if self.detectedPersonHist[bboxID].hits > self.sampleTime*self.avgFPS*self.framesFactor]
+                    
+                    # Append data
                     self.detectedPersonHisFiltered.append(
-                        {"datetime": str(timeNow), "numPerson": len(filteredDetection)})
-                    # "avgStayTime": round(np.array([val.getAliveTime() for val in filteredDetection]).mean()/60, 2) if len(filteredDetection) > 0 else 0)
+                        {"datetime": str(timeNow), 
+                        "numPerson": len(filteredDetection), 
+                        "avgStayTime": round(np.array([val.getAliveTime() for val in filteredDetection]).mean()/60, 2) if len(filteredDetection) > 0 else 0})
                     print("---------------")
-                    print([val.startTime for val in filteredDetection])
-                    [print("hits: %s, trackID: %s" % (str(trackerBox.hits), str(
-                        trackerBox.boxID))) for trackerBox in filteredDetection]
-                    print({"datetime": str(timeNow),
-                           "numPerson": len(filteredDetection),
-                           "avgStayTime": round(np.array([val.getAliveTime() for val in filteredDetection]).mean()/60, 2) if len(filteredDetection) > 0 else 0})
-
-                    self.detectedPersonHist = {}
+                    
+                    # Print debug
+                    [print(trackerBox) for trackerBox in self.detectedPersonHisFiltered]
+                    
+                    # Reset boxes hits
+                    [self.detectedPersonHist[bbox].resetHits() for bbox in self.detectedPersonHist]
+                    
+                    # Reset timer
                     self.startTime = datetime.datetime.now()
 
-                # Clean history
+                # Clean-up old bboxes from buffer
+                if len(self.detectedPersonHist) > 1000:
+                    for bbox in list(self.detectedPersonHist):
+                        if self.detectedPersonHist[bbox].getIdleTime() > self.maxIdleTime:
+                            del self.detectedPersonHist[bbox]
+
+                # Clean-up history buffer
                 if len(self.detectedPersonHisFiltered) > 1000:
                     self.detectedPersonHisFiltered = []
 
