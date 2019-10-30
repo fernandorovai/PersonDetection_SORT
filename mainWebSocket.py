@@ -204,8 +204,6 @@ mainProcess = MainProcess()
 mainProcess.start()
 
 # async function to send socket data
-
-
 async def sendData(websocket, path):
     while True:
         # await websocket.send(json.dumps("%s,%s" % ("data:image/jpeg;base64", base64.b64encode(mainProcess.getFrame()).decode())))
