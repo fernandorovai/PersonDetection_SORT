@@ -23,7 +23,6 @@ export default class RealTimePlot extends React.Component {
         this.width = 400 - margin.left - margin.right;
         this.height = 200 - margin.top - margin.bottom;
 
-
         this.x = d3
             .scaleBand()
             .range([0, this.width])
@@ -46,11 +45,11 @@ export default class RealTimePlot extends React.Component {
 
         // add the x Axis
         this.xAxis = d3.axisBottom(this.x)
-        this.xAxisSvg = 
+        this.xAxisSvg =
             svg
-            .append('g')
-            .attr('transform', 'translate(0,' + this.height + ')')
-            .attr('class', 'x-axis')
+                .append('g')
+                .attr('transform', 'translate(0,' + this.height + ')')
+                .attr('class', 'x-axis')
         this.xAxisSvg.call(this.xAxis);
 
         // add the y Axis
@@ -58,9 +57,9 @@ export default class RealTimePlot extends React.Component {
             .append('g')
             .attr('class', 'y-axis')
             .call(d3.axisLeft(this.y));
-        
-            this.pathsG = svg.append("g").attr("id", "paths").attr("class", "paths")
-        .attr("clip-path", "url(#clip2)");
+
+        this.pathsG = svg.append("g").attr("id", "paths").attr("class", "paths")
+            .attr("clip-path", "url(#clip2)");
 
         this.svg = svg
 
@@ -70,21 +69,21 @@ export default class RealTimePlot extends React.Component {
         var lineArr = []
         var parseTime = d3.timeFormat("%H:%M:%S");
 
-        for (var i = 0; i < nextProps.detectionHistory.length; i++) {
-            let el = nextProps.detectionHistory[i];
+        for (var i = 0; i < nextProps.detectionLiveSummary.length; i++) {
+            let el = nextProps.detectionLiveSummary[i];
             lineArr.push({ "time": parseTime(new Date(el.datetime)), "value": el.numPerson })
         }
 
         var line = d3.line()
-        .curve(d3.curveBasis)
-        .x(function(d) {
-          return this.x(d.time);
-        })
-        .y(function(d) {
-          return this.y(d.value);
-        });
+            .curve(d3.curveBasis)
+            .x(function (d) {
+                return this.x(d.time);
+            })
+            .y(function (d) {
+                return this.y(d.value);
+            });
 
-        console.log("component update")
+        // console.log("component update")
         // console.log(nextProps)
         this.x.domain(
             lineArr.map(d => {
@@ -99,7 +98,7 @@ export default class RealTimePlot extends React.Component {
             }),
         ]);
 
-        
+
         this.svg
             .selectAll('.bar')
             .remove()
@@ -117,33 +116,33 @@ export default class RealTimePlot extends React.Component {
                 return this.height - this.y(d.value);
             })
 
-      
 
 
-    //        //Join
-    //   var minerG = this.pathsG.selectAll(".minerLine").data(lineArr);
-    //   var minerGEnter = minerG.enter()
-    //     //Enter
-    //     .append("g")
-    //     .attr("class", "minerLine")
-    //     .merge(minerG);
 
-    //   //Join
-    //   var minerSVG = minerGEnter.selectAll("path").data(function(d) {
-    //     return [d];
-    //   });
-    //   var minerSVGenter = minerSVG.enter()
-    //     //Enter
-    //     .append("path").attr("class", "line")
-    //       .merge(minerSVG)
-    //     //Update
-    //     .transition()
-    //     .duration(1)
-    //     .ease(d3.easeLinear, 2)
-    //     .attr("d", function(d) {
-    //       return line(d)
-    //     })
-    //     .attr("transform", null)
+        //        //Join
+        //   var minerG = this.pathsG.selectAll(".minerLine").data(lineArr);
+        //   var minerGEnter = minerG.enter()
+        //     //Enter
+        //     .append("g")
+        //     .attr("class", "minerLine")
+        //     .merge(minerG);
+
+        //   //Join
+        //   var minerSVG = minerGEnter.selectAll("path").data(function(d) {
+        //     return [d];
+        //   });
+        //   var minerSVGenter = minerSVG.enter()
+        //     //Enter
+        //     .append("path").attr("class", "line")
+        //       .merge(minerSVG)
+        //     //Update
+        //     .transition()
+        //     .duration(1)
+        //     .ease(d3.easeLinear, 2)
+        //     .attr("d", function(d) {
+        //       return line(d)
+        //     })
+        //     .attr("transform", null)
 
         // update the x-axis
         this.xAxisSvg.transition().duration(1).ease(d3.easeLinear, 2).call(this.xAxis);

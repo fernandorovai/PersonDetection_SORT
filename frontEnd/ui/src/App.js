@@ -2,17 +2,18 @@ import React from 'react';
 import logo from './logo.svg';
 import './App.css';
 import RealTimePlot from './RealTimePlot'
+import LiveBubbleChart from './BubbleChart'
 
 class App extends React.Component {
   constructor() {
     super();
     this.state = {
-      "detectionHistory": null
+      "detectionLiveSummary": null
     }
   }
 
   componentDidMount() {
-    var socket = new WebSocket('ws://0.0.0.0:8765');
+    var socket = new WebSocket('ws://10.114.86.188:8765');
     socket.onopen = function (e) {
       console.log("connected")
     }
@@ -21,13 +22,17 @@ class App extends React.Component {
     socket.onmessage = (streamData) => {
       if (typeof (streamData.data) == 'string') {
         let jsonObject = JSON.parse(streamData.data);
-        this.setState({ "detectionHistory": jsonObject['detectionHistory'] })
+        this.setState({ "detectionLiveSummary": jsonObject['detectionLiveSummary'], "filteredDetectionBoxes": jsonObject['filteredDetectionBoxes'] })
       }
     }
   };
 
   render() {
-    return (<div className="realTimeChart"><RealTimePlot detectionHistory={this.state.detectionHistory} /></div>)
+    return (
+      <div>
+        <div className="realTimeChart"><RealTimePlot detectionLiveSummary={this.state.detectionLiveSummary} /> </div>
+        <div className="liveBubbleChart"><LiveBubbleChart filteredDetectionBoxes={this.state.filteredDetectionBoxes} /></div>
+      </div>)
   }
 }
 

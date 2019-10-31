@@ -19,6 +19,7 @@ import concurrent.futures
 from painter import Painter
 import datetime
 import pandas as pd
+from random import random
 
 
 class TrackerBbox():
@@ -29,7 +30,8 @@ class TrackerBbox():
         self.hits = 0
         self.aliveTime = 0
         self.lastUpdate = datetime.datetime.now()
-
+        self.x = random()*100
+        self.y = random()*100
 
     def increaseHit(self):
         self.hits += 1
@@ -38,8 +40,7 @@ class TrackerBbox():
         return self.aliveTime
 
     def updateAliveTime(self):
-        self.aliveTime = alive = (
-            datetime.datetime.now() - self.startTime).total_seconds()
+        self.aliveTime = (datetime.datetime.now() - self.startTime).total_seconds()
 
     def resetHits(self):
         self.hits = 0
@@ -56,8 +57,6 @@ class TrackerBbox():
 performing deep learning infereces and extracting statistics.
 It will serve as base class to provide data for websocket
 """
-
-
 class MainProcess(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
@@ -81,12 +80,12 @@ class MainProcess(threading.Thread):
         self.avgFilterStartTime = None
         self.detectedPersonHist = {}
         self.detectedPersonHisFiltered = []
-        self.sampleTime = 10  # seconds
+        self.sampleTime = 5  # seconds
         self.framesFactor = 0.3
         self.maxIdleTime = 10
         self.filteredDetection = []
-        self.postFrequency = 1
-        
+        self.postFrequency = 5
+
     # return unormalized person bboxes
     def getPersonBboxes(self):
         with self.lock:
@@ -101,7 +100,7 @@ class MainProcess(threading.Thread):
 
     def getPersonHis(self):
         with self.lock:
-            return self.detectedPersonHis
+            return self.detectedPersonHist
 
     def getPersonHistFiltered(self):
         with self.lock:
@@ -124,7 +123,7 @@ class MainProcess(threading.Thread):
         personTracker = Sort()
 
         # Open Webcam
-        video_capturer = cv2.VideoCapture(0)
+        video_capturer = cv2.VideoCapture(1)
         # video_capturer.set(cv2.CAP_PROP_FRAME_WIDTH, 720)
         # video_capturer.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
@@ -190,13 +189,12 @@ class MainProcess(threading.Thread):
                     # seconds * average FPS * %factor
                     # 15*20*0.4 = 120 hits to be considered a valid box
                     self.filteredDetection = [self.detectedPersonHist[bboxID]
-                                         for bboxID in self.detectedPersonHist if self.detectedPersonHist[bboxID].hits > self.sampleTime*self.avgFPS*self.framesFactor]
-                                      
-           
-                    
+                                              for bboxID in self.detectedPersonHist if self.detectedPersonHist[bboxID].hits > self.sampleTime*self.avgFPS*self.framesFactor]
+
                     # Reset boxes hits
-                    [self.detectedPersonHist[bbox].resetHits() for bbox in self.detectedPersonHist]
-                    
+                    [self.detectedPersonHist[bbox].resetHits()
+                     for bbox in self.detectedPersonHist]
+
                     # Reset timer
                     self.startTime = datetime.datetime.now()
 
@@ -205,12 +203,12 @@ class MainProcess(threading.Thread):
                     # [print(trackerBox) for trackerBox in self.detectedPersonHisFiltered]
                     # Append data
                     self.detectedPersonHisFiltered.append(
-                        {"datetime": str(timeNow), 
-                        "numPerson": len(self.filteredDetection), 
-                        "avgStayTime": round(np.array([val.getAliveTime() for val in self.filteredDetection]).mean()/60, 2) if len(self.filteredDetection) > 0 else 0})
+                        {"datetime": str(timeNow),
+                         "numPerson": len(self.filteredDetection),
+                         "avgStayTime": round(np.array([val.getAliveTime() for val in self.filteredDetection]).mean()/60, 2) if len(self.filteredDetection) > 0 else 0})
                     # print("---------------")
                     self.startPostTime = datetime.datetime.now()
-                    
+
                 # Clean-up old bboxes from buffer
                 if len(self.detectedPersonHist) > 1000:
                     for bbox in list(self.detectedPersonHist):
@@ -231,11 +229,15 @@ mainProcess = MainProcess()
 mainProcess.start()
 
 # async function to send socket data
+
+
 async def sendData(websocket, path):
     while True:
         # await websocket.send(json.dumps("%s,%s" % ("data:image/jpeg;base64", base64.b64encode(mainProcess.getFrame()).decode())))
         # await websocket.send(frame)
-        await websocket.send(json.dumps({"detectionHistory": mainProcess.getPersonHistFiltered()}))
+        await websocket.send(json.dumps({"detectionLiveSummary": mainProcess.getPersonHistFiltered(),
+                                         "filteredDetectionBoxes": [bbox.__dict__ for bbox in mainProcess.filteredDetection]}, default=str))
+
         await asyncio.sleep(mainProcess.postFrequency)
 
 # start websocket
