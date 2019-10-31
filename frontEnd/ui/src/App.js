@@ -12,7 +12,7 @@ class App extends React.Component {
   }
 
   componentDidMount() {
-    var socket = new WebSocket('ws://10.114.86.79:8765');
+    var socket = new WebSocket('ws://0.0.0.0:8765');
     socket.onopen = function (e) {
       console.log("connected")
     }
