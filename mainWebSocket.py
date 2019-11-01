@@ -80,11 +80,11 @@ class MainProcess(threading.Thread):
         self.avgFilterStartTime = None
         self.detectedPersonHist = {}
         self.detectedPersonHisFiltered = []
-        self.sampleTime = 5  # seconds
+        self.sampleTime = 1  # seconds
         self.framesFactor = 0.3
         self.maxIdleTime = 10
         self.filteredDetection = []
-        self.postFrequency = 5
+        self.postFrequency = 1
 
     # return unormalized person bboxes
     def getPersonBboxes(self):
@@ -123,7 +123,7 @@ class MainProcess(threading.Thread):
         personTracker = Sort()
 
         # Open Webcam
-        video_capturer = cv2.VideoCapture(1)
+        video_capturer = cv2.VideoCapture("testVideos/timesSquareSmall.mp4")
         # video_capturer.set(cv2.CAP_PROP_FRAME_WIDTH, 720)
         # video_capturer.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
@@ -139,7 +139,7 @@ class MainProcess(threading.Thread):
                 start = time.time()
                 timeNow = datetime.datetime.now()
 
-                _, self.frame = video_capturer.read()
+                ret, self.frame = video_capturer.read()
                 personBBoxes = self.personDetector.Detect(
                     self.frame, maxThresh=0.5)
                 # faceBboxes = self.faceDetector.Detect(self.frame, maxThresh=0.9)
@@ -219,7 +219,8 @@ class MainProcess(threading.Thread):
                 if len(self.detectedPersonHisFiltered) > 5:
                     self.detectedPersonHisFiltered.pop(0)
 
-            cv2.imshow('frame', self.frame)
+                cv2.imshow('frame', self.frame)
+  
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 

@@ -12,10 +12,11 @@ export default class LiveBubbleChart extends React.Component {
         this.bubbles = null;
         this.nodes = [];
         this.force = null;
-        this.forceStrength = 0.1;
+        this.forceStrength = 0.01;
         this.simulation = null;
         this.elements = null;
         this.force = null;
+        this.state = {"liveNumDetections": 0}
     }
 
     // Charge function that is called for each node.
@@ -28,7 +29,7 @@ export default class LiveBubbleChart extends React.Component {
     // Dividing by 8 scales down the charge to be
     // appropriate for the visualization dimensions.
     charge = (d) => {
-        return -Math.pow(d.radius, 2.0) * this.forceStrength;
+        return Math.pow(d.radius, 2.0) * this.forceStrength;
     }
 
     tick = () => {
@@ -55,7 +56,7 @@ export default class LiveBubbleChart extends React.Component {
         // Sizes bubbles based on their area instead of raw radius
         const radiusScale = d3.scaleSqrt()
             .domain([0, maxSize])
-            .range([0, 50])
+            .range([0, 30])
 
         // Use map() to convert raw data into node data.
         // Checkout http://learnjsdata.com/ for more on
@@ -86,7 +87,7 @@ export default class LiveBubbleChart extends React.Component {
 
         var force = d3.forceSimulation()
             .velocityDecay(0.2)
-            .force('charge', d3.forceManyBody().strength(this.charge))
+            // .force('charge', d3.forceManyBody().strength(this.charge))
             .force('center', d3.forceCenter(this.center.x, this.center.y))
             .force('x', d3.forceX().strength(this.forceStrength).x(this.center.x))
             .force('y', d3.forceY().strength(this.forceStrength).y(this.center.y))
@@ -96,28 +97,35 @@ export default class LiveBubbleChart extends React.Component {
 
     componentWillUpdate = (nextProps) => {
         console.log(nextProps.filteredDetectionBoxes)
-
+        let color = d3.scaleOrdinal(d3.schemeCategory10);
         let nodes = this.createNodes(nextProps.filteredDetectionBoxes);
         this.bubbles = this.svg.selectAll('circle')
             .data(nodes, function (d) { return d.id; })
             .join('circle')
             .classed('circle', true)
-            .attr('r', d => d.radius)
+            .attr('r', d => d.radius).attr('cx', d => d.x).attr('cy', d => d.y).style("fill", function(d) { return color(d.size); });
+
         var force = d3.forceSimulation()
             .velocityDecay(0.2)
             .force('charge', d3.forceManyBody().strength(this.charge))
             .force('center', d3.forceCenter(this.center.x, this.center.y))
             .force('x', d3.forceX().strength(this.forceStrength).x(this.center.x))
             .force('y', d3.forceY().strength(this.forceStrength).y(this.center.y))
-            .force('collision', d3.forceCollide().radius(d => d.radius + 1))
+            .force('collision', d3.forceCollide().radius(d => d.radius + 2))
             .on('tick', this.tick);
 
         force.nodes(nodes)
         force.restart();
+
     }
 
+ 
+    render(){
+        let liveNumDetections = 0;
+        if(this.props.filteredDetectionBoxes)
+            liveNumDetections = this.props.filteredDetectionBoxes.length
 
-    render() {
-        return (null);
+
+        return (<div className="liveNumDetections">{liveNumDetections}</div>);
     }
 }

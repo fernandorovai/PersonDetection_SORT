@@ -23,9 +23,18 @@
 
 .liveBubbleChart{
   width: 400px;
-  background-color: yellow;
+  background-color: black;
   border-radius: 20px;
   margin: 10px;
+}
+
+.liveNumDetections{
+  padding:15px;
+  font-size:40px;
+  font-weight: bold;
+  position: absolute;
+  color:white;
+  -webkit-text-stroke: 2px black;
 }
 /* .rowChart{
   width: 1000px;
