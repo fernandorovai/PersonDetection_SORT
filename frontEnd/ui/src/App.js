@@ -1,8 +1,10 @@
 import React from 'react';
 import logo from './logo.svg';
-import './App.css';
 import RealTimePlot from './RealTimePlot'
 import LiveBubbleChart from './BubbleChart'
+import 'bootstrap/dist/css/bootstrap.min.css';
+import './App.css';
+import { Container, Row, Col, Navbar, Nav } from 'react-bootstrap'
 
 class App extends React.Component {
   constructor() {
@@ -13,12 +15,11 @@ class App extends React.Component {
   }
 
   componentDidMount() {
-    var socket = new WebSocket('ws://192.168.0.16:8765');
+    var socket = new WebSocket('ws://10.114.86.76:8765');
     socket.onopen = function (e) {
       console.log("connected")
     }
 
-    let imageUrl;
     socket.onmessage = (streamData) => {
       if (typeof (streamData.data) == 'string') {
         let jsonObject = JSON.parse(streamData.data);
@@ -28,11 +29,33 @@ class App extends React.Component {
   };
 
   render() {
-    return (
-      <div>
-        <div className="realTimeChart"><RealTimePlot detectionLiveSummary={this.state.detectionLiveSummary} /> </div>
-        <div className="liveBubbleChart"><LiveBubbleChart filteredDetectionBoxes={this.state.filteredDetectionBoxes} /></div>
-      </div>)
+    return (<React.Fragment>
+      <Navbar bg="light">
+        <Navbar.Brand href="#home">MARS Café Dashboard</Navbar.Brand>
+      </Navbar>
+      <Container fluid>
+        <Row>
+          <Col className="bg-light no-gutters" md={2} >
+            <Nav defaultActiveKey="/home" className="flex-column">
+              <Nav.Link href="/home">Active</Nav.Link>
+              <Nav.Link eventKey="link-1">Link</Nav.Link>
+              <Nav.Link eventKey="link-2">Link</Nav.Link>
+              <Nav.Link eventKey="disabled" disabled>
+                Disabled
+            </Nav.Link>
+            </Nav>
+          </Col>
+
+          <Col className="bg-light no-gutters">
+            <Row>
+              <Col className="no-gutters lineChart" md={7}> <RealTimePlot detectionLiveSummary={this.state.detectionLiveSummary} />   </Col>
+              <Col className="no-gutters liveBubbleChart" md={5}><LiveBubbleChart filteredDetectionBoxes={this.state.filteredDetectionBoxes} detectionLiveSummary={this.state.detectionLiveSummary} /></Col>
+            </Row>
+          </Col>
+        </Row>
+      </Container >
+    </React.Fragment>
+    )
   }
 }
 

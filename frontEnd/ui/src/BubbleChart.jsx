@@ -1,12 +1,14 @@
 import React from 'react';
 import * as d3 from "d3";
+import { Row, Col, } from 'react-bootstrap'
+import LiveSummaryBar from './liveSummaryBar'
 
 export default class LiveBubbleChart extends React.Component {
     constructor(props) {
         super(props);
         this.bubbleChart = null;
         this.width = 400;
-        this.height = 400;
+        this.height = 300;
         this.center = { x: this.width / 2, y: this.height / 2 };
         this.svg = null;
         this.bubbles = null;
@@ -16,7 +18,7 @@ export default class LiveBubbleChart extends React.Component {
         this.simulation = null;
         this.elements = null;
         this.force = null;
-        this.state = {"liveNumDetections": 0}
+        this.state = { "liveNumDetections": 0 }
     }
 
     // Charge function that is called for each node.
@@ -103,7 +105,7 @@ export default class LiveBubbleChart extends React.Component {
             .data(nodes, function (d) { return d.id; })
             .join('circle')
             .classed('circle', true)
-            .attr('r', d => d.radius).attr('cx', d => d.x).attr('cy', d => d.y).style("fill", function(d) { return color(d.size); });
+            .attr('r', d => d.radius).attr('cx', d => d.x).attr('cy', d => d.y).style("fill", function (d) { return color(d.size); });
 
         var force = d3.forceSimulation()
             .velocityDecay(0.2)
@@ -119,13 +121,23 @@ export default class LiveBubbleChart extends React.Component {
 
     }
 
- 
-    render(){
+
+    render() {
         let liveNumDetections = 0;
-        if(this.props.filteredDetectionBoxes)
+        let maxAlive = 0;
+        let avgStayTime = 0;
+
+        if (this.props.filteredDetectionBoxes) {
             liveNumDetections = this.props.filteredDetectionBoxes.length
+            maxAlive = Math.max.apply(Math, this.props.filteredDetectionBoxes.map(function (o) { return o.aliveTime; }))
+        }
+
+        if (this.props.detectionLiveSummary) {
+            if (this.props.detectionLiveSummary.length > 0)
+                avgStayTime = this.props.detectionLiveSummary.slice(-1)[0].avgStayTime;
+        }
 
 
-        return (<div className="liveNumDetections">{liveNumDetections}</div>);
+        return (<div><h4 className="text-dark">Real-Time Person Tracking</h4><LiveSummaryBar numLiveDetections={liveNumDetections} maxTimeAlive={maxAlive} avgStayTime={avgStayTime} /></div>);
     }
 }

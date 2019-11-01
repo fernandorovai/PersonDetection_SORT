@@ -40,7 +40,8 @@ class TrackerBbox():
         return self.aliveTime
 
     def updateAliveTime(self):
-        self.aliveTime = (datetime.datetime.now() - self.startTime).total_seconds()
+        self.aliveTime = (datetime.datetime.now() -
+                          self.startTime).total_seconds()
 
     def resetHits(self):
         self.hits = 0
@@ -57,6 +58,8 @@ class TrackerBbox():
 performing deep learning infereces and extracting statistics.
 It will serve as base class to provide data for websocket
 """
+
+
 class MainProcess(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
@@ -72,7 +75,7 @@ class MainProcess(threading.Thread):
         self.painter = Painter()
 
         # Data
-        self.person_track_bbs_ids = []
+        self.personTrackBbIDs = []
         self.instantFPS = 0
         self.avgFPS = 0
         self.frame = None
@@ -89,7 +92,7 @@ class MainProcess(threading.Thread):
     # return unormalized person bboxes
     def getPersonBboxes(self):
         with self.lock:
-            return self.person_track_bbs_ids.tolist()
+            return self.personTrackBbIDs.tolist()
 
     def getFrame(self):
         img_str = None
@@ -102,7 +105,7 @@ class MainProcess(threading.Thread):
         with self.lock:
             return self.detectedPersonHist
 
-    def getPersonHistFiltered(self):
+    def getLiveSummary(self):
         with self.lock:
             return self.detectedPersonHisFiltered
 
@@ -123,10 +126,10 @@ class MainProcess(threading.Thread):
         personTracker = Sort()
 
         # Open Webcam
-        video_capturer = cv2.VideoCapture("testVideos/timesSquareSmall.mp4")
+        # video_capturer = cv2.VideoCapture("testVideos/timesSquareSmall.mp4")
+        video_capturer = cv2.VideoCapture(1)
         # video_capturer.set(cv2.CAP_PROP_FRAME_WIDTH, 720)
         # video_capturer.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-
         fps = 0
 
         videoSize = (video_capturer.get(3), video_capturer.get(4))
@@ -145,7 +148,7 @@ class MainProcess(threading.Thread):
                 # faceBboxes = self.faceDetector.Detect(self.frame, maxThresh=0.9)
 
                 # Update Tracker
-                self.person_track_bbs_ids = personTracker.update(
+                self.personTrackBbIDs = personTracker.update(
                     np.array(personBBoxes))
 
                 # Measure performance
@@ -163,7 +166,7 @@ class MainProcess(threading.Thread):
 
                 # Draw numBoxes
                 self.frame = self.painter.DrawTotalBoxes(
-                    self.frame, len(self.person_track_bbs_ids))
+                    self.frame, len(self.personTrackBbIDs))
 
                 # Draw detections
                 for personBbox in personBBoxes:
@@ -171,7 +174,7 @@ class MainProcess(threading.Thread):
                         self.frame, personBbox, videoSize, color=(255, 0, 0), thickness=5)
 
                 # Draw tracker
-                for personBbox in self.person_track_bbs_ids:
+                for personBbox in self.personTrackBbIDs:
                     trackID = str(int(personBbox[4]))
                     if trackID in self.detectedPersonHist:
                         self.detectedPersonHist[trackID].increaseHit()
@@ -220,7 +223,7 @@ class MainProcess(threading.Thread):
                     self.detectedPersonHisFiltered.pop(0)
 
                 cv2.imshow('frame', self.frame)
-  
+
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
@@ -234,11 +237,8 @@ mainProcess.start()
 
 async def sendData(websocket, path):
     while True:
-        # await websocket.send(json.dumps("%s,%s" % ("data:image/jpeg;base64", base64.b64encode(mainProcess.getFrame()).decode())))
-        # await websocket.send(frame)
-        await websocket.send(json.dumps({"detectionLiveSummary": mainProcess.getPersonHistFiltered(),
+        await websocket.send(json.dumps({"detectionLiveSummary": mainProcess.getLiveSummary(),
                                          "filteredDetectionBoxes": [bbox.__dict__ for bbox in mainProcess.filteredDetection]}, default=str))
-
         await asyncio.sleep(mainProcess.postFrequency)
 
 # start websocket

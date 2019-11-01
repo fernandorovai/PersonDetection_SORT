@@ -20,7 +20,7 @@ export default class RealTimePlot extends React.Component {
     componentDidMount() {
 
         const margin = { top: 20, right: 20, bottom: 30, left: 40 };
-        this.width = 400 - margin.left - margin.right;
+        this.width = 500 - margin.left - margin.right;
         this.height = 200 - margin.top - margin.bottom;
 
         this.x = d3
@@ -35,8 +35,7 @@ export default class RealTimePlot extends React.Component {
             .append('div')
             .attr('class', 'container');
 
-
-        const svg = container
+        const svg = d3.select('.lineChart')
             .append('svg')
             .attr('width', this.width + margin.left + margin.right)
             .attr('height', this.height + margin.top + margin.bottom)
