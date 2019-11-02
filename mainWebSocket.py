@@ -19,7 +19,7 @@ import concurrent.futures
 from painter import Painter
 import datetime
 import pandas as pd
-from random import random
+from random import *
 
 
 class TrackerBbox():
@@ -32,6 +32,14 @@ class TrackerBbox():
         self.lastUpdate = datetime.datetime.now()
         self.x = random()*100
         self.y = random()*100
+        self.trackerCoords = ()
+        self.trackerShadow = []
+        self.trackShadowSize = 30
+        self.color = []
+        self.genColor()
+
+    def genColor(self):
+        self.color = list(np.random.choice(range(256), size=3))
 
     def increaseHit(self):
         self.hits += 1
@@ -53,13 +61,27 @@ class TrackerBbox():
         idle = datetime.datetime.now() - self.lastUpdate
         return idle.total_seconds()
 
+    def addTrackerShadowPt(self):
+        xMin, yMin, xMax, yMax = self.trackerCoords
+        xCenter = xMin + (xMax - xMin)/2
+        yCenter = yMin + (yMax - yMin)/2
+        self.trackerShadow.append({"xCenter": xCenter, "yCenter": yCenter})
+        if len(self.trackerShadow) > self.trackShadowSize:
+            self.trackerShadow.pop(0)
+
+    def getTrackerShadow(self):
+        return self.trackerShadow
+
+    def setTrackerCoords(self, trackerCoords):
+        self.trackerCoords = trackerCoords
+    
+    def getColor(self):
+        return self.color
 
 """Main thread resposible for receiving camera frames,
 performing deep learning infereces and extracting statistics.
 It will serve as base class to provide data for websocket
 """
-
-
 class MainProcess(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
@@ -76,18 +98,21 @@ class MainProcess(threading.Thread):
 
         # Data
         self.personTrackBbIDs = []
+        self.faceTrackBbIDs = []
         self.instantFPS = 0
         self.avgFPS = 0
         self.frame = None
         self.startTime = None
         self.avgFilterStartTime = None
         self.detectedPersonHist = {}
+        self.detectedFaceHist = {}
         self.detectedPersonHisFiltered = []
         self.sampleTime = 1  # seconds
         self.framesFactor = 0.3
         self.maxIdleTime = 10
         self.filteredDetection = []
         self.postFrequency = 1
+        self.videoSize = []
 
     # return unormalized person bboxes
     def getPersonBboxes(self):
@@ -116,6 +141,36 @@ class MainProcess(threading.Thread):
         timeDiff = end-start
         return timeDiff.total_seconds()
 
+
+    def processTracker(self, trackerDetections, trackerHist):
+        # Create / update tracked bbox
+        for trackedBbox in trackerDetections:
+            trackID = str(int(trackedBbox[4]))
+            if trackID in trackerHist:
+                trackerHist[trackID].increaseHit()
+                trackerHist[trackID].updateAliveTime()
+                trackerHist[trackID].refreshLastUpdate()
+                trackerHist[trackID].setTrackerCoords(trackedBbox[:4])
+                trackerHist[trackID].addTrackerShadowPt()
+            else:
+                trackerHist[trackID] = TrackerBbox(trackID, (0))
+            
+            # Draw tracker
+            self.frame = self.painter.DrawBox(self.frame, trackedBbox.tolist(), self.videoSize, trackerHist[trackID].getColor(), thickness=2)
+            self.frame = self.painter.DrawTrackerShadow(self.frame, trackerHist[trackID].getTrackerShadow(), self.videoSize, trackerHist[trackID].getColor())
+
+
+    def cleanUpBuffers(self, trackerHist):
+        # Clean-up old bboxes from buffer
+        if len(trackerHist) > 1000:
+            for bbox in list(trackerHist):
+                if trackerHist[bbox].getIdleTime() > self.maxIdleTime:
+                    del trackerHist[bbox]
+
+        # Clean-up history buffer
+        if len(self.detectedPersonHisFiltered) > 5:
+            self.detectedPersonHisFiltered.pop(0)
+
     def run(self):
         # Initiliaze timer
         self.startTime = datetime.datetime.now()
@@ -124,15 +179,16 @@ class MainProcess(threading.Thread):
 
         # Initialize Trackers
         personTracker = Sort()
+        faceTracker = Sort()
 
         # Open Webcam
-        # video_capturer = cv2.VideoCapture("testVideos/timesSquareSmall.mp4")
-        video_capturer = cv2.VideoCapture(1)
+        video_capturer = cv2.VideoCapture("testVideos/street360p.mp4")
+        # video_capturer = cv2.VideoCapture(0)
         # video_capturer.set(cv2.CAP_PROP_FRAME_WIDTH, 720)
         # video_capturer.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         fps = 0
 
-        videoSize = (video_capturer.get(3), video_capturer.get(4))
+        self.videoSize = (video_capturer.get(3), video_capturer.get(4))
         img_str = None
         fpsList = []
 
@@ -142,14 +198,37 @@ class MainProcess(threading.Thread):
                 start = time.time()
                 timeNow = datetime.datetime.now()
 
+                # Read frame
                 ret, self.frame = video_capturer.read()
-                personBBoxes = self.personDetector.Detect(
-                    self.frame, maxThresh=0.5)
-                # faceBboxes = self.faceDetector.Detect(self.frame, maxThresh=0.9)
+                
+                # Person detector
+                personBBoxes = self.personDetector.Detect(self.frame, maxThresh=0.7)
+                
+                # Face detector
+                faceBboxes = self.faceDetector.Detect(self.frame, maxThresh=0.7)
 
-                # Update Tracker
-                self.personTrackBbIDs = personTracker.update(
-                    np.array(personBBoxes))
+                # Update Trackers
+                self.personTrackBbIDs = personTracker.update(np.array(personBBoxes))
+                self.faceTrackBbIDs = faceTracker.update(np.array(faceBboxes))
+
+                 # Draw fps
+                self.frame = self.painter.DrawFPS(self.frame, self.avgFPS)
+
+                # Draw numBoxes
+                self.frame = self.painter.DrawTotalBoxes(
+                    self.frame, len(self.personTrackBbIDs))
+
+                # Draw person detections
+                for personBbox in personBBoxes:
+                    self.frame = self.painter.DrawBox(
+                        self.frame, personBbox, self.videoSize, color=([255, 255, 255]), thickness=5)
+           
+                # Draw face detections
+                for faceBbox in faceBboxes:
+                    self.frame = self.painter.DrawBox(
+                        self.frame, faceBbox, self.videoSize, color=([255, 0, 0]), thickness=2)
+                    
+                    self.frame = self.painter.ApplyGaussian(self.frame, faceBbox[:4], self.videoSize)
 
                 # Measure performance
                 seconds = time.time() - start
@@ -161,32 +240,13 @@ class MainProcess(threading.Thread):
                     # print("Average FPS: %s" % str(avgFps))
                     fpsList.pop(0)
 
-                # Draw fps
-                self.frame = self.painter.DrawFPS(self.frame, self.avgFPS)
-
-                # Draw numBoxes
-                self.frame = self.painter.DrawTotalBoxes(
-                    self.frame, len(self.personTrackBbIDs))
-
-                # Draw detections
-                for personBbox in personBBoxes:
-                    self.frame = self.painter.DrawBox(
-                        self.frame, personBbox, videoSize, color=(255, 0, 0), thickness=5)
-
-                # Draw tracker
-                for personBbox in self.personTrackBbIDs:
-                    trackID = str(int(personBbox[4]))
-                    if trackID in self.detectedPersonHist:
-                        self.detectedPersonHist[trackID].increaseHit()
-                        self.detectedPersonHist[trackID].updateAliveTime()
-                        self.detectedPersonHist[trackID].refreshLastUpdate()
-                    else:
-                        self.detectedPersonHist[trackID] = TrackerBbox(
-                            trackID, (0))
-                    self.frame = self.painter.DrawBox(
-                        self.frame, personBbox.tolist(), videoSize, color=(255, 255, 255), thickness=2)
-
-                # Save detection hist to be consumed
+                # Process person tracker
+                self.processTracker(self.personTrackBbIDs, self.detectedPersonHist)
+                
+                # Process face tracker
+                self.processTracker(self.faceTrackBbIDs, self.detectedFaceHist)
+            
+                # Save detection hist to be consumed later
                 if self.getTimeDiffinSec(self.startTime, timeNow) > self.sampleTime:
                     # filter boxes that had present at least in x% of the frames during y seconds
                     # seconds * average FPS * %factor
@@ -194,12 +254,15 @@ class MainProcess(threading.Thread):
                     self.filteredDetection = [self.detectedPersonHist[bboxID]
                                               for bboxID in self.detectedPersonHist if self.detectedPersonHist[bboxID].hits > self.sampleTime*self.avgFPS*self.framesFactor]
 
+                    # Reset person boxes hits
+                    [self.detectedPersonHist[bbox].resetHits() for bbox in self.detectedPersonHist]
+
                     # Reset boxes hits
-                    [self.detectedPersonHist[bbox].resetHits()
-                     for bbox in self.detectedPersonHist]
+                    [self.detectedFaceHist[bbox].resetHits() for bbox in self.detectedFaceHist]
 
                     # Reset timer
                     self.startTime = datetime.datetime.now()
+
 
                 if self.getTimeDiffinSec(self.startPostTime, timeNow) > self.postFrequency:
                     # Print debug
@@ -212,15 +275,9 @@ class MainProcess(threading.Thread):
                     # print("---------------")
                     self.startPostTime = datetime.datetime.now()
 
-                # Clean-up old bboxes from buffer
-                if len(self.detectedPersonHist) > 1000:
-                    for bbox in list(self.detectedPersonHist):
-                        if self.detectedPersonHist[bbox].getIdleTime() > self.maxIdleTime:
-                            del self.detectedPersonHist[bbox]
-
-                # Clean-up history buffer
-                if len(self.detectedPersonHisFiltered) > 5:
-                    self.detectedPersonHisFiltered.pop(0)
+                # Clean-up buffers
+                self.cleanUpBuffers(self.detectedPersonHist)
+                self.cleanUpBuffers(self.detectedFaceHist)
 
                 cv2.imshow('frame', self.frame)
 
